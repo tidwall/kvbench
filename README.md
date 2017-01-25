@@ -7,8 +7,8 @@ It has support for redis pipelining.
 Features:
 
 - Databases
-  - [BoltDB](https://github.com/boltdb/bolt),
-  - [LevelDB](https://github.com/syndtr/goleveldb),
+  - [BoltDB](https://github.com/boltdb/bolt)
+  - [LevelDB](https://github.com/syndtr/goleveldb)
   - map (in-memory) with [AOF persistence](https://redis.io/topics/persistence)
   - btree (in-memory) with [AOF persistence](https://redis.io/topics/persistence)
 - Option to disable fsync
@@ -54,6 +54,19 @@ Start in-memory server with no disk persistence:
 ./kvbench --store=map --path=:memory:
 ```
 
+## Supported Redis Commands
+
+```
+SET key value
+GET key
+DEL key
+KEYS pattern [LIMIT count]
+FLUSHDB
+QUIT
+PING
+SHUTDOWN
+```
+
 
 ## Benchmarking
 
@@ -71,17 +84,316 @@ SET: 7902.23 requests per second
 GET: 376923.25 requests per second
 ```
 
-## Supported Redis Commands
 
+## Benchmark Results
+
+*These benchmarks were run on a MacBook Pro 15" 2.8 GHz Intel Core i7 using Go 1.7.*
+
+### 1M random keys, no pipelining, 1 client
+
+benchmark command
 ```
-SET key value
-GET key
-DEL key
-KEYS pattern [LIMIT count]
-FLUSHDB
-QUIT
-PING
-SHUTDOWN
+redis-benchmark -p 6380 -q -t set,get -n 1000000 -r 1000000 -c 1 -P 1
+```
+
+#### map (in-memory)
+persist + fsync
+```
+./kvbench --store=map
+SET: 9246.76 requests per second
+GET: 35855.14 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=map --fsync=false
+SET: 30256.27 requests per second
+GET: 36670.33 requests per second
+```
+nopersist
+```
+./kvbench --store=map --path=:memory:
+SET: 37727.30 requests per second
+GET: 36592.51 requests per second
+```
+
+#### btree (in-memory)
+persist + fsync
+```
+./kvbench --store=btree
+SET: 8610.74 requests per second
+GET: 32863.39 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=btree --fsync=false
+SET: 26992.01 requests per second
+GET: 33298.93 requests per second
+```
+nopersist
+```
+./kvbench --store=btree --path=:memory:
+SET: 34837.14 requests per second
+GET: 35968.64 requests per second
+```
+
+#### bolt (on-disk)
+persist + fsync
+```
+./kvbench --store=bolt
+SET: 4061.14 requests per second
+GET: 35698.99 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=bolt --fsync=false
+SET: 14295.52 requests per second
+GET: 34033.29 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### leveldb (on-disk)
+persist + fsync
+```
+./kvbench --store=leveldb
+SET: 8774.78 requests per second
+GET: 37024.70 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=leveldb --fsync=false
+SET: 23483.55 requests per second
+GET: 31654.59 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### redis (in-memory)
+persist + fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync always
+SET: 9361.98 requests per second
+GET: 34010.14 requests per second
+```
+persist + no-fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync no
+SET: 29439.47 requests per second
+GET: 30951.13 requests per second
+```
+nopersist
+```
+redis-server --port 6380 --appendonly no
+SET: 33704.08 requests per second
+GET: 32879.59 requests per second
+```
+
+
+
+### 1M random keys, no pipelining, 256 concurrent clients
+
+benchmark command
+```
+redis-benchmark -p 6380 -q -t set,get -n 1000000 -r 1000000 -c 256 -P 1
+```
+
+#### map (in-memory)
+persist + fsync
+```
+./kvbench --store=map
+SET: 12850.68 requests per second
+GET: 91962.48 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=map --fsync=false
+SET: 84495.14 requests per second
+GET: 99124.56 requests per second
+```
+nopersist
+```
+./kvbench --store=map --path=:memory:
+SET: 103928.50 requests per second
+GET: 98318.76 requests per second
+```
+#### btree (in-memory)
+persist + fsync
+```
+./kvbench --store=btree
+SET: 12314.21 requests per second
+GET: 93510.38 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=btree --fsync=false
+SET: 73024.68 requests per second
+GET: 97819.67 requests per second
+```
+nopersist
+```
+./kvbench --store=btree --path=:memory:
+SET: 94188.57 requests per second
+GET: 101112.23 requests per second
+```
+#### bolt (on-disk)
+persist + fsync
+```
+./kvbench --store=bolt
+SET: 4386.21 requests per second
+GET: 88051.42 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=bolt --fsync=false
+SET: 21771.31 requests per second
+GET: 82135.52 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### leveldb (on-disk)
+persist + fsync
+```
+./kvbench --store=leveldb
+SET: 83514.28 requests per second
+GET: 97389.95 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=leveldb --fsync=false
+SET: 88051.42 requests per second
+GET: 101791.52 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### redis (in-memory)
+persist + fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync always
+SET: 118708.45 requests per second
+GET: 131302.52 requests per second
+```
+persist + no-fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync no
+SET: 132292.62 requests per second
+GET: 127893.59 requests per second
+```
+nopersist
+```
+redis-server --port 6380 --appendonly no
+SET: 128435.66 requests per second
+GET: 121212.12 requests per second
+```
+
+### 1M random keys, 256 pipelining, 256 concurrent clients
+
+benchmark command
+```
+redis-benchmark -p 6380 -q -t set,get -n 1000000 -r 1000000 -c 256 -P 256
+```
+
+#### map (in-memory)
+persist + fsync
+```
+./kvbench --store=map
+SET: 709723.19 requests per second
+GET: 2083333.38 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=map --fsync=false
+SET: 1076426.25 requests per second
+GET: 1960784.38 requests per second
+```
+nopersist
+```
+./kvbench --store=map --path=:memory:
+SET: 1324503.38 requests per second
+GET: 1733102.12 requests per second
+```
+#### btree (in-memory)
+persist + fsync
+```
+./kvbench --store=btree
+SET: 350631.12 requests per second
+GET: 2309468.75 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=btree --fsync=false
+SET: 455580.88 requests per second
+GET: 2320185.75 requests per second
+```
+nopersist
+```
+./kvbench --store=btree --path=:memory:
+SET: 475285.16 requests per second
+GET: 2079002.00 requests per second
+```
+#### bolt (on-disk)
+persist + fsync
+```
+./kvbench --store=bolt
+SET: 115420.13 requests per second
+GET: 2487562.25 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=bolt --fsync=false
+SET: 193162.06 requests per second
+GET: 2732240.50 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### leveldb (on-disk)
+persist + fsync
+```
+./kvbench --store=leveldb
+SET: 472813.25 requests per second
+GET: 2923976.50 requests per second
+```
+persist + no-fsync
+```
+./kvbench --store=leveldb --fsync=false
+SET: 474833.81 requests per second
+GET: 2832861.25 requests per second
+```
+nopersist
+```
+not available
+```
+
+#### redis (in-memory)
+persist + fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync always
+SET: 405022.25 requests per second
+GET: 979431.88 requests per second
+```
+persist + no-fsync
+```
+redis-server --port 6380 --appendonly yes --appendfsync no
+SET: 433651.34 requests per second
+GET: 942507.06 requests per second
+```
+nopersist
+```
+redis-server --port 6380 --appendonly no
+SET: 690607.75 requests per second
+GET: 1004016.06 requests per second
 ```
 
 ## Contact
