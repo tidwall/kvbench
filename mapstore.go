@@ -62,24 +62,38 @@ func (s *mapStore) Close() error {
 }
 
 func (s *mapStore) PSet(keys, values [][]byte) error {
-	for i := range keys {
-		if err := s.Set(keys[i], values[i]); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.aof != nil {
+		s.aof.BeginBuffer()
+		for i := range keys {
+			s.aof.AppendBuffer([]byte("set"), keys[i], values[i])
+		}
+		err := s.aof.WriteBuffer()
+		if err != nil {
 			return err
 		}
+	}
+	for i := range keys {
+		s.keys[string(keys[i])] = bcopy(values[i])
 	}
 	return nil
 }
 
 func (s *mapStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var values [][]byte
 	var oks []bool
 	for i := range keys {
-		value, ok, err := s.Get(keys[i])
-		if err != nil {
-			return nil, nil, err
+		v, ok := s.keys[string(keys[i])]
+		if !ok {
+			values = append(values, nil)
+			oks = append(oks, false)
+		} else {
+			values = append(values, v)
+			oks = append(oks, true)
 		}
-		values = append(values, value)
-		oks = append(oks, ok)
 	}
 	return values, oks, nil
 }

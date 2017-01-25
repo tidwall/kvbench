@@ -94,7 +94,6 @@ func (s *btreeStore) PSet(keys, values [][]byte) error {
 func (s *btreeStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	var values [][]byte
 	var oks []bool
 	for i := range keys {

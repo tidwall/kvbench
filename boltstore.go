@@ -50,24 +50,40 @@ func (s *boltStore) Close() error {
 }
 
 func (s *boltStore) PSet(keys, values [][]byte) error {
-	for i := range keys {
-		if err := s.Set(keys[i], values[i]); err != nil {
-			return err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(boltBucket)
+		for i := 0; i < len(keys); i++ {
+			if err := b.Put(boltKey(keys[i]), values[i]); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (s *boltStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var values [][]byte
 	var oks []bool
-	for i := range keys {
-		value, ok, err := s.Get(keys[i])
-		if err != nil {
-			return nil, nil, err
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(boltBucket)
+		for i := 0; i < len(keys); i++ {
+			v := b.Get(boltKey(keys[i]))
+			if v == nil {
+				values = append(values, nil)
+				oks = append(oks, false)
+			} else {
+				values = append(values, bcopy(v))
+				oks = append(oks, true)
+			}
 		}
-		values = append(values, value)
-		oks = append(oks, ok)
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 	return values, oks, nil
 }
