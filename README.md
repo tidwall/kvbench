@@ -89,6 +89,52 @@ GET: 376923.25 requests per second
 
 *These benchmarks were run on a MacBook Pro 15" 2.8 GHz Intel Core i7 using Go 1.7.*
 
+Store   | Pipeline | Clients | Persist | Fsync | SET/sec  | GET/sec
+------- | -------- | ------- | ------- | ----- | -------  | -------
+map     | 1        | 1       | yes     | yes   | 9246     | 35855
+map     | 1        | 1       | yes     | no    | 30256    | 36670
+map     | 1        | 1       | no      | no    | 37727    | 36592
+btree   | 1        | 1       | yes     | yes   | 8610     | 32863
+btree   | 1        | 1       | yes     | no    | 26992    | 33298
+btree   | 1        | 1       | no      | no    | 34837    | 35968
+bolt    | 1        | 1       | yes     | yes   | 4061     | 35698
+bolt    | 1        | 1       | yes     | no    | 14295    | 34033
+leveldb | 1        | 1       | yes     | yes   | 8774     | 37024
+leveldb | 1        | 1       | yes     | no    | 23483    | 31654
+redis   | 1        | 1       | yes     | yes   | 9361     | 34010
+redis   | 1        | 1       | yes     | no    | 29439    | 30951
+resis   | 1        | 1       | no      | no    | 33704    | 32879
+map     | 1        | 256     | yes     | yes   | 12850    | 91962
+map     | 1        | 256     | yes     | no    | 84495    | 99124
+map     | 1        | 256     | no      | no    | 103928   | 98318
+btree   | 1        | 256     | yes     | yes   | 12314    | 93510
+btree   | 1        | 256     | yes     | no    | 73024    | 97819
+btree   | 1        | 256     | no      | no    | 94188    | 101112
+bolt    | 1        | 256     | yes     | yes   | 4386     | 88051
+bolt    | 1        | 256     | yes     | no    | 21771    | 82135
+leveldb | 1        | 256     | yes     | yes   | 83514    | 97389
+leveldb | 1        | 256     | yes     | no    | 88051    | 101791
+redis   | 1        | 256     | yes     | yes   | 118708   | 131302
+redis   | 1        | 256     | yes     | no    | 132292   | 127893
+resis   | 1        | 256     | no      | no    | 128435   | 121212
+map     | 256      | 256     | yes     | yes   | 709723   | 2083333
+map     | 256      | 256     | yes     | no    | 1076426  | 1960784
+map     | 256      | 256     | no      | no    | 1324503  | 1733102
+btree   | 256      | 256     | yes     | yes   | 350631   | 2309468
+btree   | 256      | 256     | yes     | no    | 455580   | 2320185
+btree   | 256      | 256     | no      | no    | 475285   | 2079002
+bolt    | 256      | 256     | yes     | yes   | 115420   | 2487562
+bolt    | 256      | 256     | yes     | no    | 193162   | 2732240
+leveldb | 256      | 256     | yes     | yes   | 472813   | 2923976
+leveldb | 256      | 256     | yes     | no    | 474833   | 2832861
+redis   | 256      | 256     | yes     | yes   | 405022   | 979431
+redis   | 256      | 256     | yes     | no    | 433651   | 942507
+resis   | 256      | 256     | no      | no    | 690607   | 1004016
+
+
+
+
+
 ### 1M random keys, no pipelining, 1 client
 
 benchmark command
