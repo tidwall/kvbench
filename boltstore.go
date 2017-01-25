@@ -1,4 +1,4 @@
-package main
+package kvbench
 
 import (
 	"errors"
@@ -23,7 +23,7 @@ func boltKey(key []byte) []byte {
 }
 func newBoltStore(path string, fsync bool) (*boltStore, error) {
 	if path == ":memory:" {
-		return nil, errors.New(":memory: path not available for bolt store")
+		return nil, errMemoryNotAllowed
 	}
 	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
@@ -43,16 +43,12 @@ func newBoltStore(path string, fsync bool) (*boltStore, error) {
 }
 
 func (s *boltStore) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.db.Close()
 	return nil
 }
 
 func (s *boltStore) PSet(keys, values [][]byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.db.Batch(func(tx *bolt.Tx) error {
 		b := tx.Bucket(boltBucket)
 		for i := 0; i < len(keys); i++ {
 			if err := b.Put(boltKey(keys[i]), values[i]); err != nil {
@@ -64,8 +60,6 @@ func (s *boltStore) PSet(keys, values [][]byte) error {
 }
 
 func (s *boltStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var values [][]byte
 	var oks []bool
 	err := s.db.View(func(tx *bolt.Tx) error {
@@ -89,16 +83,12 @@ func (s *boltStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
 }
 
 func (s *boltStore) Set(key, value []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return s.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(boltBucket).Put(boltKey(key), value)
 	})
 }
 
 func (s *boltStore) Get(key []byte) ([]byte, bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	var v []byte
 	err := s.db.View(func(tx *bolt.Tx) error {
 		v = tx.Bucket(boltBucket).Get(boltKey(key))
@@ -108,8 +98,6 @@ func (s *boltStore) Get(key []byte) ([]byte, bool, error) {
 }
 
 func (s *boltStore) Del(key []byte) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	var v []byte
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		bkey := boltKey(key)
@@ -120,8 +108,6 @@ func (s *boltStore) Del(key []byte) (bool, error) {
 }
 
 func (s *boltStore) Keys(pattern []byte, limit int, withvalues bool) ([][]byte, [][]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	spattern := string(pattern)
 	min, max := match.Allowable(spattern)
 	bmin := []byte(min)
@@ -169,8 +155,6 @@ func (s *boltStore) Keys(pattern []byte, limit int, withvalues bool) ([][]byte, 
 }
 
 func (s *boltStore) FlushDB() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return s.db.Update(func(tx *bolt.Tx) error {
 		if err := tx.DeleteBucket(boltBucket); err != nil {
 			return err

@@ -1,7 +1,7 @@
-package main
+package kvbench
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,7 +11,16 @@ import (
 	"github.com/tidwall/redlog"
 )
 
+var errMemoryNotAllowed = errors.New(":memory: path not available")
 var log = redlog.New(os.Stderr)
+
+type Options struct {
+	Port  int
+	Which string
+	Fsync bool
+	Path  string
+	Log   *redlog.Logger
+}
 
 type Store interface {
 	Close() error
@@ -24,16 +33,12 @@ type Store interface {
 	FlushDB() error
 }
 
-func main() {
-	var port int
-	var which string
-	var fsync bool
-	var path string
-	flag.IntVar(&port, "p", 6380, "server port")
-	flag.StringVar(&which, "store", "map", "store type: map,btree,bolt,leveldb")
-	flag.BoolVar(&fsync, "fsync", true, "fsync")
-	flag.StringVar(&path, "path", "", "database path or ':memory:' for none")
-	flag.Parse()
+func Start(opts Options) error {
+	port := opts.Port
+	which := opts.Which
+	fsync := opts.Fsync
+	path := opts.Path
+	log = opts.Log
 	var store Store
 	var err error
 	switch which {
@@ -59,17 +64,20 @@ func main() {
 			path = "leveldb.db"
 		}
 		store, err = newLevelDBStore(path, fsync)
+	case "kv":
+		log.Warningf("kv store is unstable")
+		if path == "" {
+			path = "kv.db"
+		}
+		store, err = newKVStore(path, fsync)
 	}
 	if err != nil {
-		log.Warningf("%v", err.Error())
-		os.Exit(1)
+		return err
 	}
 	defer store.Close()
-	go func() {
-		log.Printf("started server on port %d", port)
-		log.Printf("store type: %v, fsync: %v", which, fsync)
-	}()
-	err = redcon.ListenAndServe(fmt.Sprintf(":%d", port),
+	log.Printf("store type: %v, fsync: %v", which, fsync)
+	var srv *redcon.Server
+	srv = redcon.NewServer(fmt.Sprintf(":%d", port),
 		func(conn redcon.Conn, cmd redcon.Command) {
 			cmdp, keys, values, is := parsePipeline(conn, cmd)
 			if !is {
@@ -79,6 +87,11 @@ func main() {
 			default:
 				conn.WriteError(
 					"ERR unknown command '" + string(cmd.Args[0]) + "'")
+			case cmdSHUTDOWN:
+				conn.WriteString("OK")
+				conn.Close()
+				log.Warningf("shutting down")
+				srv.Close()
 			case cmdPING:
 				conn.WriteString("PONG")
 			case cmdQUIT:
@@ -200,16 +213,23 @@ func main() {
 				}
 			}
 		}, nil, nil)
-	if err != nil {
-		log.Warningf("%v", err)
-		os.Exit(1)
-	}
+	errch := make(chan error)
+	go func() {
+		err := <-errch
+		if err != nil {
+			log.Warningf("%v", err)
+		} else {
+			log.Printf("started server on port %d", port)
+		}
+	}()
+	return srv.ListenServeAndSignal(errch)
 }
 
 type cmdType int
 
 const (
 	cmdUnknown cmdType = iota
+	cmdSHUTDOWN
 	cmdFLUSHDB
 	cmdKEYS
 	cmdPING
@@ -224,6 +244,17 @@ const (
 
 func cmdParse(cmd []byte) cmdType {
 	switch len(cmd) {
+	case 8:
+		if (cmd[0] == 'S' || cmd[0] == 's') &&
+			(cmd[1] == 'H' || cmd[1] == 'h') &&
+			(cmd[2] == 'U' || cmd[2] == 'u') &&
+			(cmd[3] == 'T' || cmd[3] == 't') &&
+			(cmd[4] == 'D' || cmd[4] == 'd') &&
+			(cmd[5] == 'O' || cmd[5] == 'o') &&
+			(cmd[6] == 'W' || cmd[6] == 'w') &&
+			(cmd[7] == 'N' || cmd[7] == 'n') {
+			return cmdSHUTDOWN
+		}
 	case 7:
 		if (cmd[0] == 'F' || cmd[0] == 'f') &&
 			(cmd[1] == 'L' || cmd[1] == 'l') &&

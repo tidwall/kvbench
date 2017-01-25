@@ -1,7 +1,6 @@
-package main
+package kvbench
 
 import (
-	"errors"
 	"os"
 	"sync"
 
@@ -15,16 +14,14 @@ type leveldbStore struct {
 	db    *leveldb.DB
 	path  string
 	fsync bool
+	wo    *opt.WriteOptions
 }
 
 func newLevelDBStore(path string, fsync bool) (*leveldbStore, error) {
 	if path == ":memory:" {
-		return nil, errors.New(":memory: path not available for bolt store")
+		return nil, errMemoryNotAllowed
 	}
-	var opts *opt.Options
-	if !fsync {
-		opts = &opt.Options{NoSync: !fsync}
-	}
+	opts := &opt.Options{NoSync: !fsync}
 	db, err := leveldb.OpenFile(path, opts)
 	if err != nil {
 		return nil, err
@@ -33,6 +30,7 @@ func newLevelDBStore(path string, fsync bool) (*leveldbStore, error) {
 		db:    db,
 		path:  path,
 		fsync: fsync,
+		wo:    &opt.WriteOptions{Sync: fsync},
 	}, nil
 }
 
@@ -43,12 +41,13 @@ func (s *leveldbStore) Close() error {
 	return nil
 }
 func (s *leveldbStore) PSet(keys, values [][]byte) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	batch := new(leveldb.Batch)
 	for i := range keys {
-		if err := s.Set(keys[i], values[i]); err != nil {
-			return err
-		}
+		batch.Put(keys[i], values[i])
 	}
-	return nil
+	return s.db.Write(batch, s.wo)
 }
 
 func (s *leveldbStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
@@ -66,9 +65,9 @@ func (s *leveldbStore) PGet(keys [][]byte) ([][]byte, []bool, error) {
 }
 
 func (s *leveldbStore) Set(key, value []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.db.Put(key, value, nil)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.db.Put(key, value, s.wo)
 }
 
 func (s *leveldbStore) Get(key []byte) ([]byte, bool, error) {
@@ -85,13 +84,13 @@ func (s *leveldbStore) Get(key []byte) ([]byte, bool, error) {
 }
 
 func (s *leveldbStore) Del(key []byte) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	ok, err := s.db.Has(key, nil)
 	if !ok || err != nil {
 		return ok, err
 	}
-	err = s.db.Delete(key, nil)
+	err = s.db.Delete(key, s.wo)
 	if err != nil {
 		return false, err
 	}
